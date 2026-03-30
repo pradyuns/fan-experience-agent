@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     webhook_hmac_secret: str = "dev-secret"
 
+    # Adaptation loop
     adaptation_interval_minutes: int = 30
     adaptation_horizon_hours: int = 48
     max_replans_per_plan: int = 5

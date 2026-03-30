@@ -1,10 +1,12 @@
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from fan_experience.config import Settings
+from fan_experience.db.models import Base
 
 
 @pytest.fixture
-# building isolated settings for tests.
 def test_settings():
     return Settings(
         database_url="sqlite+aiosqlite:///",
@@ -12,3 +14,13 @@ def test_settings():
         anthropic_api_key="test-key",
         webhook_hmac_secret="test-secret",
     )
+
+
+# shared in-memory database for model tests.
+@pytest.fixture
+def db_session():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+    engine.dispose()

@@ -94,7 +94,6 @@ class Purchase(Base):
     ticket_count: Mapped[int] = mapped_column(Integer)
     purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
-    __table_args__ = (Index("ix_purchases_purchase_id", "purchase_id"),)
 
 
 # tracking the overall plan lifecycle for a purchase.
