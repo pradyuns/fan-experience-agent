@@ -16,7 +16,7 @@ def test_settings():
     )
 
 
-# shared in-memory database for model tests.
+# in-memory sqlite for model tests (sync, no postgres needed)
 @pytest.fixture
 def db_session():
     engine = create_engine("sqlite:///:memory:")

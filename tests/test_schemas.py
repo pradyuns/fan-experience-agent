@@ -2,7 +2,6 @@ import uuid
 from datetime import datetime, timezone
 
 from fan_experience.schemas.agent import AgentContext, PlanProposal
-from fan_experience.schemas.common import PlanStatusEnum, ReservationStatusEnum
 from fan_experience.schemas.plan import (
     FeedbackRequest,
     PlanResponse,

@@ -3,10 +3,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+# standard wrapper for all tool responses
 @dataclass
 class ToolResult:
-    """Base result for all agent tools. Includes source and freshness metadata."""
-
     data: Any
     source: str
     freshness_timestamp: datetime = field(

@@ -3,9 +3,10 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from fan_experience.schemas.common import PlanStatusEnum
+from fan_experience.db.models import PlanStatus
 
 
+# single restaurant candidate in a plan's shortlist
 class ShortlistOption(BaseModel):
     candidate_id: str
     recommended: bool
@@ -26,12 +27,13 @@ class PlanVersionResponse(BaseModel):
 
 class PlanResponse(BaseModel):
     id: uuid.UUID
-    status: PlanStatusEnum
+    status: PlanStatus
     current_version: PlanVersionResponse | None
     versions: list[PlanVersionResponse]
     created_at: datetime
 
 
+# user refinement input (free-text or structured prefs)
 class RefineRequest(BaseModel):
     message: str | None = None
     structured_preferences: dict | None = None

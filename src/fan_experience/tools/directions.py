@@ -3,7 +3,7 @@ import math
 from fan_experience.tools.base import ToolResult
 
 
-# estimating straight-line travel distance for the mock directions tool.
+# great-circle distance between two lat/lng points
 def _haversine_km(
     lat1: float,
     lng1: float,
@@ -22,15 +22,13 @@ def _haversine_km(
     return earth_radius_km * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-# returning mock routing metadata for the requested travel mode.
+# mock directions with simple speed/traffic estimates
 async def get_directions(
     origin: tuple[float, float],
     destination: tuple[float, float],
     mode: str,
-    departure_time: str,
+    _departure_time: str,
 ) -> ToolResult:
-    del departure_time
-
     dist_km = _haversine_km(origin[0], origin[1], destination[0], destination[1])
 
     if mode == "walking":

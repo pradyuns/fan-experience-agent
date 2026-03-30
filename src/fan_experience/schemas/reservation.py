@@ -3,9 +3,10 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from fan_experience.schemas.common import ReservationStatusEnum
+from fan_experience.db.models import ReservationStatus
 
 
+# book/change/cancel preview before committing
 class ReservationPreviewRequest(BaseModel):
     action: str
     candidate_id: str
@@ -22,8 +23,9 @@ class ReservationPreviewResponse(BaseModel):
     cancellation_policy: str | None
     deposit_required: bool
     idempotency_key: str
-    status: ReservationStatusEnum
+    status: ReservationStatus
 
 
+# confirms a previously previewed reservation
 class ReservationConfirmRequest(BaseModel):
     idempotency_key: str

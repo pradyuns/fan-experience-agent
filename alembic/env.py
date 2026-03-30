@@ -7,14 +7,16 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from fan_experience.db.models import Base
 
+# alembic config and logging setup
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# point alembic at our models so autogenerate works
 target_metadata = Base.metadata
 
 
-# configuring offline migrations without a live database connection.
+# offline mode: emit sql without connecting to db
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
@@ -27,14 +29,13 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-# binding alembic operations to a live async database connection.
 def do_run_migrations(connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()
 
 
-# creating the async engine for online migrations.
+# online mode: run migrations through async engine
 async def run_async_migrations() -> None:
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -46,7 +47,6 @@ async def run_async_migrations() -> None:
     await connectable.dispose()
 
 
-# bridging alembic's sync entrypoint to async migration execution.
 def run_migrations_online() -> None:
     asyncio.run(run_async_migrations())
 

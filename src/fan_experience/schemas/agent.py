@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from fan_experience.schemas.plan import ShortlistOption
 
 
+# context passed to the planning agent for each run
 class AgentContext(BaseModel):
     plan_id: uuid.UUID
     user_id: uuid.UUID
@@ -13,6 +14,7 @@ class AgentContext(BaseModel):
     refinement_preferences: dict | None = None
 
 
+# agent output: shortlist + summary for a plan version
 class PlanProposal(BaseModel):
     shortlist: list[ShortlistOption]
     plan_summary: str

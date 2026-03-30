@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+# inbound webhook payload from ticketing provider
 class PurchaseWebhook(BaseModel):
     purchase_id: str
     user_id: uuid.UUID

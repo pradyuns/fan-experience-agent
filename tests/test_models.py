@@ -20,9 +20,7 @@ from fan_experience.db.models import (
 )
 
 
-# verifying users and purchases persist correctly.
 def test_create_user_and_purchase(db_session):
-    """All models can be instantiated and relationships work."""
     user = User(
         id=uuid.uuid4(),
         name="Test Fan",
@@ -59,7 +57,6 @@ def test_create_user_and_purchase(db_session):
     assert row.user_id == user.id
 
 
-# verifying plans can store versions, reservations, and notifications.
 def test_plan_with_version_and_reservation(db_session):
     user_id = uuid.uuid4()
     event_id = uuid.uuid4()
@@ -126,7 +123,6 @@ def test_plan_with_version_and_reservation(db_session):
     assert loaded_plan.status == PlanStatus.GENERATING
 
 
-# verifying preferences and adaptation logs can be queried after persistence.
 def test_user_preference_and_adaptation_log(db_session):
     user_id = uuid.uuid4()
     plan_id = uuid.uuid4()

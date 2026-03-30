@@ -1,14 +1,12 @@
 from fan_experience.tools.base import ToolResult
 
 
-# returning a stable mock weather snapshot for local development.
+# returns static mock weather (clear, 78°F)
 async def get_weather(
-    location: tuple[float, float],
-    date: str,
-    time: str,
+    _location: tuple[float, float],
+    _date: str,
+    _time: str,
 ) -> ToolResult:
-    del location, date, time
-
     data = {
         "temperature_f": 78,
         "conditions": "clear",

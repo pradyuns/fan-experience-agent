@@ -7,22 +7,22 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import JSON, Uuid
 
 
-# defining the base class for all orm models.
+# sqlalchemy declarative base for all models
 class Base(DeclarativeBase):
     pass
 
 
-# generating utc timestamps for default model fields.
+# default factories for timestamps and primary keys
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# generating uuid primary keys for new records.
 def _new_uuid() -> uuid.UUID:
     return uuid.uuid4()
 
 
-# defining plan lifecycle states stored in the database.
+# -- enums --
+
 class PlanStatus(str, enum.Enum):
     GENERATING = "GENERATING"
     ACTIVE = "ACTIVE"
@@ -49,6 +49,7 @@ class NotificationType(str, enum.Enum):
     RESERVATION_CANCELLED = "RESERVATION_CANCELLED"
 
 
+# outcome of each adaptation-loop tick
 class AdaptationResult(str, enum.Enum):
     NO_CHANGE = "NO_CHANGE"
     REPLAN_TRIGGERED = "REPLAN_TRIGGERED"
@@ -56,7 +57,8 @@ class AdaptationResult(str, enum.Enum):
     RATE_LIMITED = "RATE_LIMITED"
 
 
-# storing core fan account details.
+# -- tables --
+
 class User(Base):
     __tablename__ = "users"
 
@@ -67,7 +69,6 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
-# storing event and venue details tied to purchases.
 class Event(Base):
     __tablename__ = "events"
 
@@ -83,7 +84,7 @@ class Event(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
-# recording an external ticket purchase for a user and event.
+# links a user to a ticketed event
 class Purchase(Base):
     __tablename__ = "purchases"
 
@@ -95,8 +96,7 @@ class Purchase(Base):
     purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-
-# tracking the overall plan lifecycle for a purchase.
+# one plan per purchase, tracks dining plan lifecycle
 class Plan(Base):
     __tablename__ = "plans"
 
@@ -120,7 +120,7 @@ class Plan(Base):
     )
 
 
-# storing immutable plan snapshots for each revision.
+# immutable snapshot of a plan at a point in time
 class PlanVersion(Base):
     __tablename__ = "plan_versions"
 
@@ -138,7 +138,7 @@ class PlanVersion(Base):
     __table_args__ = (Index("ix_plan_versions_plan_id", "plan_id"),)
 
 
-# storing reservation previews and confirmed booking metadata.
+# restaurant reservation tied to a plan
 class Reservation(Base):
     __tablename__ = "reservations"
 
@@ -169,7 +169,6 @@ class Reservation(Base):
     )
 
 
-# recording fan-facing plan and reservation notifications.
 class Notification(Base):
     __tablename__ = "notifications"
 
@@ -181,7 +180,7 @@ class Notification(Base):
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-# storing learned user preference signals with confidence.
+# learned user preferences (cuisine, price, etc.)
 class UserPreference(Base):
     __tablename__ = "user_preferences"
 
@@ -199,7 +198,7 @@ class UserPreference(Base):
     __table_args__ = (Index("ix_user_prefs_user_type", "user_id", "preference_type"),)
 
 
-# recording each adaptation tick result for auditing and rate limits.
+# audit trail for each adaptation-loop evaluation
 class AdaptationLog(Base):
     __tablename__ = "adaptation_logs"
 

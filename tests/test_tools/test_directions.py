@@ -9,7 +9,7 @@ async def test_get_directions():
         origin=(34.050, -118.260),
         destination=(34.043, -118.267),
         mode="walking",
-        departure_time="2026-07-01T18:30:00Z",
+        _departure_time="2026-07-01T18:30:00Z",
     )
     d = result.data
     assert "duration_minutes" in d
@@ -26,7 +26,7 @@ async def test_get_directions_driving():
         origin=(34.050, -118.260),
         destination=(34.043, -118.267),
         mode="driving",
-        departure_time="2026-07-01T18:30:00Z",
+        _departure_time="2026-07-01T18:30:00Z",
     )
     d = result.data
     assert d["traffic_factor"] >= 1.0

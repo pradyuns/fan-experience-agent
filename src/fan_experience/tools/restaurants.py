@@ -1,5 +1,6 @@
 from fan_experience.tools.base import ToolResult
 
+# hard-coded restaurant fixtures for dev/testing
 _MOCK_RESTAURANTS = [
     {
         "id": "rest-001",
@@ -64,24 +65,23 @@ _MOCK_RESTAURANTS = [
 ]
 
 
-# filtering mock restaurant candidates for the requested plan window.
+# filter mock restaurants by cuisine, radius, and party size
 async def search_restaurants(
-    location: tuple[float, float],
+    _location: tuple[float, float],
     radius_km: float,
     cuisine_types: list[str] | None,
     party_size: int,
-    date: str,
-    time_range: tuple[str, str],
+    _date: str,
+    _time_range: tuple[str, str],
 ) -> ToolResult:
-    del location, date, time_range
-
-    candidates = _MOCK_RESTAURANTS.copy()
+    candidates = _MOCK_RESTAURANTS
 
     if cuisine_types:
         candidates = [r for r in candidates if r["cuisine"] in cuisine_types]
 
     candidates = [r for r in candidates if r["distance_km"] <= radius_km]
 
+    # large parties shouldn't go to fast casual
     if party_size >= 8:
         candidates = [r for r in candidates if r["category"] != "fast_casual"]
 

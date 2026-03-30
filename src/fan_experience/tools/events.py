@@ -1,5 +1,6 @@
 from fan_experience.tools.base import ToolResult
 
+# hard-coded event fixtures for dev/testing
 _MOCK_EVENTS = {
     "event-001": {
         "venue_name": "Crypto.com Arena",
@@ -24,7 +25,6 @@ _MOCK_EVENTS = {
 }
 
 
-# returning event metadata for the requested mock event id.
 async def get_event_details(event_id: str) -> ToolResult:
     data = _MOCK_EVENTS.get(event_id)
     if data is None:
