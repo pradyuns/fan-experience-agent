@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 # app-wide settings, loaded from env vars prefixed with FAN_
 class Settings(BaseSettings):
     # infrastructure
-    database_url: str = "postgresql+asyncpg://localhost:5432/fan_experience"
+    database_url: str = "postgresql+asyncpg://fan_experience:fan_experience@localhost:5432/fan_experience"
     redis_url: str = "redis://localhost:6379/0"
     anthropic_api_key: str = ""
     webhook_hmac_secret: str = "dev-secret"

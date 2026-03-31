@@ -3,6 +3,8 @@ services:
     image: postgres:16
     container_name: fan-experience-postgres
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-fan_experience}
       POSTGRES_USER: ${POSTGRES_USER:-fan_experience}
@@ -19,12 +21,15 @@ services:
         ]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 5
+      start_period: 10s
 
   redis:
     image: redis:7
     container_name: fan-experience-redis
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "6379:6379"
     volumes:
@@ -33,7 +38,8 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data:
