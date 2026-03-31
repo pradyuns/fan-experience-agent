@@ -21,7 +21,6 @@ class ReservationService:
         reservation_time: datetime,
     ) -> Reservation:
         reservation = Reservation(
-            id=uuid.uuid4(),
             plan_id=plan_id,
             restaurant_id=restaurant_id,
             restaurant_name=restaurant_name,
@@ -50,12 +49,16 @@ class ReservationService:
         self._session.commit()
         return reservation
 
+    # cancellable from either confirmed or change-confirmed states
     def preview_cancel(self, plan_id: uuid.UUID, restaurant_id: str) -> Reservation:
         reservation = self._session.execute(
             select(Reservation).where(
                 Reservation.plan_id == plan_id,
                 Reservation.restaurant_id == restaurant_id,
-                Reservation.status == ReservationStatus.CONFIRMED,
+                Reservation.status.in_([
+                    ReservationStatus.CONFIRMED,
+                    ReservationStatus.CHANGE_CONFIRMED,
+                ]),
             )
         ).scalar_one()
 

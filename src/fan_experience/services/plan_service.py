@@ -28,7 +28,6 @@ class PlanService:
         next_version = max_version + 1
 
         version = PlanVersion(
-            id=uuid.uuid4(),
             plan_id=plan_id,
             version_number=next_version,
             payload_json={
@@ -45,8 +44,10 @@ class PlanService:
         )
         self._session.add(version)
 
-        plan = self._session.execute(select(Plan).where(Plan.id == plan_id)).scalar_one()
-        plan.status = PlanStatus.ACTIVE
+        # only transition to active if not already in that state
+        plan = self._session.get(Plan, plan_id)
+        if plan.status != PlanStatus.ACTIVE:
+            plan.status = PlanStatus.ACTIVE
         self._session.commit()
 
         return version
