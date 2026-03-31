@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -82,7 +83,32 @@ class SingleTurnSession(AgentSession):
 
     # parse the final text response into a validated plan proposal
     def _parse_response(self, response: Any) -> PlanProposal:
+        text_blocks: list[str] = []
         for block in response.content:
             if block.type == "text":
-                return PlanProposal(**json.loads(block.text))
+                text_blocks.append(block.text)
+                try:
+                    return PlanProposal(**json.loads(self._extract_json(block.text)))
+                except json.JSONDecodeError:
+                    continue
+        if text_blocks:
+            combined_text = "\n".join(text_blocks)
+            return PlanProposal(**json.loads(self._extract_json(combined_text)))
         raise ValueError("No text block in agent response")
+
+    @staticmethod
+    def _extract_json(text: str) -> str:
+        stripped = text.strip()
+        if stripped.startswith("{"):
+            return stripped
+
+        fenced_match = re.search(r"```json\s*(\{.*\})\s*```", text, re.DOTALL)
+        if fenced_match:
+            return fenced_match.group(1)
+
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return text[start : end + 1]
+
+        return stripped

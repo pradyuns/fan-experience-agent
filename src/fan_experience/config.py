@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 # app-wide settings, loaded from env vars prefixed with FAN_
@@ -16,7 +16,12 @@ class Settings(BaseSettings):
     replan_cooldown_minutes: int = 60
     post_confirm_cooldown_minutes: int = 120
 
-    model_config = {"env_prefix": "FAN_"}
+    model_config = SettingsConfigDict(
+        env_prefix="FAN_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()

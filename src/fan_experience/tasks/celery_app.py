@@ -16,3 +16,6 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
 )
+
+# importing task modules ensures Celery registers decorated tasks at worker startup.
+from fan_experience.tasks import plan_generation  # noqa: E402,F401

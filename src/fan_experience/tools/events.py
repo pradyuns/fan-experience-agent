@@ -1,3 +1,8 @@
+import uuid
+from datetime import timezone
+
+from fan_experience.db.engine import async_session_factory
+from fan_experience.db.models import Event
 from fan_experience.tools.base import ToolResult
 
 # hard-coded event fixtures for dev/testing
@@ -27,9 +32,36 @@ _MOCK_EVENTS = {
 
 async def get_event_details(event_id: str) -> ToolResult:
     data = _MOCK_EVENTS.get(event_id)
-    if data is None:
+    if data is not None:
+        return ToolResult(data=data, source="mock_event_api")
+
+    try:
+        parsed_id = uuid.UUID(event_id)
+    except ValueError:
         return ToolResult(
             data={"error": f"Event {event_id} not found"},
             source="mock_event_api",
         )
-    return ToolResult(data=data, source="mock_event_api")
+
+    async with async_session_factory() as session:
+        event = await session.get(Event, parsed_id)
+
+    if event is None:
+        return ToolResult(
+            data={"error": f"Event {event_id} not found"},
+            source="mock_event_api",
+        )
+
+    return ToolResult(
+        data={
+            "venue_name": event.venue_name,
+            "venue_address": event.venue_address,
+            "venue_lat": event.venue_lat,
+            "venue_lng": event.venue_lng,
+            "event_time": event.event_time.astimezone(timezone.utc).isoformat(),
+            "doors_open": event.doors_open.astimezone(timezone.utc).isoformat(),
+            "genre": event.genre,
+            "expected_attendance": 18000,
+        },
+        source="db_event_store",
+    )

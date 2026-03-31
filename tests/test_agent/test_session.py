@@ -72,3 +72,33 @@ async def test_single_turn_session_processes_tool_calls():
     assert len(recommended) == 1
     assert recommended[0].candidate_id == "rest-001"
     assert mock_client.messages.create.call_count == 2
+
+
+def test_single_turn_session_parses_fenced_json_response():
+    final_response = MagicMock()
+    text_block = MagicMock()
+    text_block.type = "text"
+    text_block.text = (
+        "Based on all the information gathered, here's your personalized dining plan:\n\n"
+        "```json\n"
+        "{\n"
+        '  "shortlist": [\n'
+        "    {\n"
+        '      "candidate_id": "rest-002",\n'
+        '      "recommended": true,\n'
+        '      "dining_time": "2026-07-01T17:00:00+00:00",\n'
+        '      "option_reasoning": "Quiet sushi option with good timing."\n'
+        "    }\n"
+        "  ],\n"
+        '  "plan_summary": "Dinner at 5 before the game.",\n'
+        '  "conversation_history": []\n'
+        "}\n"
+        "```"
+    )
+    final_response.content = [text_block]
+
+    session = SingleTurnSession(client=AsyncMock())
+    proposal = session._parse_response(final_response)
+
+    assert proposal.plan_summary == "Dinner at 5 before the game."
+    assert proposal.shortlist[0].candidate_id == "rest-002"
