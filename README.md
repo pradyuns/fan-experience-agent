@@ -187,7 +187,7 @@ FAN_ANTHROPIC_API_KEY=your_real_key_here
 ## Start Local Infrastructure
 
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres redis otel-collector
 ```
 
 Optional validation:
@@ -196,6 +196,11 @@ Optional validation:
 docker compose config
 docker ps --filter name=fan-experience-postgres --filter name=fan-experience-redis
 ```
+
+Local observability endpoints:
+
+- OTLP HTTP ingest: `http://localhost:4318`
+- Prometheus metrics from the collector: `http://localhost:9464/metrics`
 
 ## Bootstrap the Database
 

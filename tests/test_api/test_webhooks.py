@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from fan_experience.api.app import create_app
 from fan_experience.db.models import Event, Plan, PlanStatus, Purchase, User
+from fan_experience.telemetry.metrics import snapshot_metric_events
 
 
 @pytest.fixture
@@ -77,7 +78,7 @@ async def test_webhook_creates_plan(webhook_db):
         mock_settings.webhook_hmac_secret = "test-secret"
 
         with patch("fan_experience.api.webhooks.dispatch_plan_generation") as mock_dispatch:
-            mock_dispatch.delay = MagicMock()
+            mock_dispatch.apply_async = MagicMock()
 
             async with AsyncClient(
                 transport=ASGITransport(app=app),
@@ -96,6 +97,13 @@ async def test_webhook_creates_plan(webhook_db):
     data = response.json()
     assert "plan_id" in data
     assert data["status"] == "generating"
+    mock_dispatch.apply_async.assert_called_once_with(
+        args=[data["plan_id"]],
+        headers={},
+    )
+    assert snapshot_metric_events("fan_webhook_events_total")[-1].attributes == {
+        "result": "accepted"
+    }
 
 
 @pytest.mark.asyncio
@@ -122,6 +130,9 @@ async def test_webhook_rejects_bad_signature(webhook_db):
             )
 
     assert response.status_code == 401
+    assert snapshot_metric_events("fan_webhook_events_total")[-1].attributes == {
+        "result": "invalid_signature"
+    }
 
 
 @pytest.mark.asyncio
@@ -176,3 +187,6 @@ async def test_webhook_duplicate_purchase(webhook_db):
     data = response.json()
     assert data["status"] == "already_processed"
     assert data["plan_id"] == str(plan_id)
+    assert snapshot_metric_events("fan_webhook_events_total")[-1].attributes == {
+        "result": "duplicate"
+    }

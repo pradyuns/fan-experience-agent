@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from sqlalchemy import select
 
 from fan_experience.db.models import (
@@ -15,6 +16,7 @@ from fan_experience.db.models import (
     User,
 )
 from fan_experience.tasks.plan_generation import run_plan_generation
+from fan_experience.telemetry.metrics import snapshot_metric_events
 
 
 def _seed(session):
@@ -110,6 +112,9 @@ def test_run_plan_generation_success(db_session):
     )
     assert len(notifications) == 1
     assert notifications[0].type == NotificationType.PLAN_CREATED
+    assert snapshot_metric_events("fan_plan_generation_total")[-1].attributes == {
+        "result": "success"
+    }
 
 
 def test_run_plan_generation_failure_marks_failed(db_session):
@@ -124,7 +129,11 @@ def test_run_plan_generation_failure_marks_failed(db_session):
         "fan_experience.tasks.plan_generation.SingleTurnSession",
         return_value=mock_agent_session,
     ):
-        run_plan_generation(str(plan_id), db_session=db_session)
+        with pytest.raises(RuntimeError, match="Agent exceeded maximum tool rounds"):
+            run_plan_generation(str(plan_id), db_session=db_session)
 
     plan = db_session.execute(select(Plan).where(Plan.id == plan_id)).scalar_one()
     assert plan.status == PlanStatus.FAILED
+    assert snapshot_metric_events("fan_plan_generation_total")[-1].attributes == {
+        "result": "failure"
+    }

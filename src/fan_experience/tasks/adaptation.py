@@ -1,6 +1,8 @@
 import uuid
+import logging
 from datetime import datetime, timedelta, timezone
 
+from opentelemetry.trace import Status, StatusCode
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,13 @@ from fan_experience.db.models import (
     Reservation,
     ReservationStatus,
 )
+from fan_experience.tasks.celery_app import celery_app
+from fan_experience.telemetry.context import bind_context
+from fan_experience.telemetry.logging import emit_event, get_logger
+from fan_experience.telemetry.metrics import record_adaptation_tick
+from fan_experience.telemetry.tracing import get_tracer, set_span_attributes
+
+logger = get_logger(__name__)
 
 
 def check_hard_triggers(session: Session, plan_id: uuid.UUID) -> list[str]:
@@ -61,57 +70,103 @@ def should_rate_limit(session: Session, plan_id: uuid.UUID) -> bool:
     return recent_count > 0
 
 
+@celery_app.task(name="fan_experience.run_adaptation_tick")
 def run_adaptation_tick(plan_id_str: str, db_session: Session | None = None):
     plan_id = uuid.UUID(plan_id_str)
+    tracer = get_tracer(__name__)
 
     owns_session = db_session is None
     if owns_session:
         db_session = sync_session()
 
     try:
-        max_tick = db_session.execute(
-            select(func.coalesce(func.max(AdaptationLog.tick_number), 0)).where(
-                AdaptationLog.plan_id == plan_id
-            )
-        ).scalar_one()
-        tick_number = max_tick + 1
+        with bind_context(plan_id=str(plan_id)):
+            with tracer.start_as_current_span("adaptation.tick") as span:
+                set_span_attributes(span, **{"plan.id": str(plan_id)})
+                try:
+                    with tracer.start_as_current_span("adaptation.next_tick_number"):
+                        max_tick = db_session.execute(
+                            select(func.coalesce(func.max(AdaptationLog.tick_number), 0)).where(
+                                AdaptationLog.plan_id == plan_id
+                            )
+                        ).scalar_one()
+                        tick_number = max_tick + 1
 
-        hard_triggers = check_hard_triggers(db_session, plan_id)
-        if hard_triggers:
-            db_session.add(
-                AdaptationLog(
-                    plan_id=plan_id,
-                    tick_number=tick_number,
-                    result=AdaptationResult.HARD_TRIGGER,
-                    trigger_details_json={"triggers": hard_triggers},
-                )
-            )
-            db_session.commit()
-            return
+                    with tracer.start_as_current_span("adaptation.check_hard_triggers"):
+                        hard_triggers = check_hard_triggers(db_session, plan_id)
+                    if hard_triggers:
+                        result = AdaptationResult.HARD_TRIGGER
+                        db_session.add(
+                            AdaptationLog(
+                                plan_id=plan_id,
+                                tick_number=tick_number,
+                                result=result,
+                                trigger_details_json={"triggers": hard_triggers},
+                            )
+                        )
+                        db_session.commit()
+                        record_adaptation_tick(result.value.lower())
+                        emit_event(
+                            logger,
+                            "adaptation.tick.completed",
+                            status=result.value.lower(),
+                            tick_number=tick_number,
+                        )
+                        return result.value
 
-        if should_rate_limit(db_session, plan_id):
-            db_session.add(
-                AdaptationLog(
-                    plan_id=plan_id,
-                    tick_number=tick_number,
-                    result=AdaptationResult.RATE_LIMITED,
-                    trigger_details_json={"reason": "rate_limited"},
-                )
-            )
-            db_session.commit()
-            return
+                    with tracer.start_as_current_span("adaptation.rate_limit_check"):
+                        rate_limited = should_rate_limit(db_session, plan_id)
+                    if rate_limited:
+                        result = AdaptationResult.RATE_LIMITED
+                        db_session.add(
+                            AdaptationLog(
+                                plan_id=plan_id,
+                                tick_number=tick_number,
+                                result=result,
+                                trigger_details_json={"reason": "rate_limited"},
+                            )
+                        )
+                        db_session.commit()
+                        record_adaptation_tick(result.value.lower())
+                        emit_event(
+                            logger,
+                            "adaptation.tick.completed",
+                            status=result.value.lower(),
+                            tick_number=tick_number,
+                        )
+                        return result.value
 
-        db_session.add(
-            AdaptationLog(
-                plan_id=plan_id,
-                tick_number=tick_number,
-                result=AdaptationResult.NO_CHANGE,
-                trigger_details_json={
-                    "checked": ["weather", "traffic", "availability"]
-                },
-            )
-        )
-        db_session.commit()
+                    result = AdaptationResult.NO_CHANGE
+                    db_session.add(
+                        AdaptationLog(
+                            plan_id=plan_id,
+                            tick_number=tick_number,
+                            result=result,
+                            trigger_details_json={
+                                "checked": ["weather", "traffic", "availability"]
+                            },
+                        )
+                    )
+                    db_session.commit()
+                    record_adaptation_tick(result.value.lower())
+                    emit_event(
+                        logger,
+                        "adaptation.tick.completed",
+                        status=result.value.lower(),
+                        tick_number=tick_number,
+                    )
+                    return result.value
+                except Exception as exc:
+                    span.record_exception(exc)
+                    span.set_status(Status(StatusCode.ERROR))
+                    emit_event(
+                        logger,
+                        "adaptation.tick.failed",
+                        level=logging.ERROR,
+                        status="failure",
+                        error_type=type(exc).__name__,
+                    )
+                    raise
     finally:
         if owns_session:
             db_session.close()

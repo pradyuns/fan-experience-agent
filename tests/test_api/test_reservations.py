@@ -1,11 +1,13 @@
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from fan_experience.api.app import create_app
 from fan_experience.db.models import Reservation, ReservationStatus
+from fan_experience.telemetry.metrics import snapshot_metric_events
 
 
 def _make_client(session):
@@ -25,30 +27,43 @@ async def test_preview_and_confirm_flow(active_plan_db):
     session, plan_id = active_plan_db
     app = _make_client(session)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        preview_response = await client.post(
-            f"/plans/{plan_id}/reservations/preview",
-            json={
-                "action": "book",
-                "candidate_id": "rest-001",
-                "dining_time": "2026-07-01T17:30:00Z",
-                "party_size": 2,
-            },
-        )
-        assert preview_response.status_code == 200
-        preview_data = preview_response.json()
-        assert "idempotency_key" in preview_data
-        assert preview_data["status"] == "PREVIEW_PENDING"
+    with patch("fan_experience.api.reservations.emit_event") as mock_emit:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            preview_response = await client.post(
+                f"/plans/{plan_id}/reservations/preview",
+                json={
+                    "action": "book",
+                    "candidate_id": "rest-001",
+                    "dining_time": "2026-07-01T17:30:00Z",
+                    "party_size": 2,
+                },
+            )
+            assert preview_response.status_code == 200
+            preview_data = preview_response.json()
+            assert "idempotency_key" in preview_data
+            assert preview_data["status"] == "PREVIEW_PENDING"
 
-        confirm_response = await client.post(
-            f"/plans/{plan_id}/reservations/confirm",
-            json={"idempotency_key": preview_data["idempotency_key"]},
-        )
-        assert confirm_response.status_code == 200
-        assert confirm_response.json()["status"] == "CONFIRMED"
+            confirm_response = await client.post(
+                f"/plans/{plan_id}/reservations/confirm",
+                json={"idempotency_key": preview_data["idempotency_key"]},
+            )
+            assert confirm_response.status_code == 200
+            assert confirm_response.json()["status"] == "CONFIRMED"
+
+    assert [call.args[1] for call in mock_emit.call_args_list] == [
+        "reservation.preview.created",
+        "reservation.confirmed",
+    ]
+    metric_attributes = [
+        event.attributes for event in snapshot_metric_events("fan_reservation_actions_total")
+    ]
+    assert metric_attributes == [
+        {"action": "preview", "result": "success"},
+        {"action": "confirm", "result": "success"},
+    ]
 
 
 @pytest.mark.asyncio
@@ -56,17 +71,23 @@ async def test_confirm_unknown_key(active_plan_db):
     session, plan_id = active_plan_db
     app = _make_client(session)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        response = await client.post(
-            f"/plans/{plan_id}/reservations/confirm",
-            json={"idempotency_key": "nonexistent"},
-        )
+    with patch("fan_experience.api.reservations.emit_event") as mock_emit:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            response = await client.post(
+                f"/plans/{plan_id}/reservations/confirm",
+                json={"idempotency_key": "nonexistent"},
+            )
 
     assert response.status_code == 400
     assert "not found" in response.json()["detail"].lower()
+    assert mock_emit.call_args.args[1] == "reservation.confirm.rejected"
+    assert snapshot_metric_events("fan_reservation_actions_total")[-1].attributes == {
+        "action": "confirm",
+        "result": "not_found",
+    }
 
 
 @pytest.mark.asyncio
@@ -88,17 +109,23 @@ async def test_confirm_wrong_state(active_plan_db):
 
     app = _make_client(session)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        response = await client.post(
-            f"/plans/{plan_id}/reservations/confirm",
-            json={"idempotency_key": "cancelled-key"},
-        )
+    with patch("fan_experience.api.reservations.emit_event") as mock_emit:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            response = await client.post(
+                f"/plans/{plan_id}/reservations/confirm",
+                json={"idempotency_key": "cancelled-key"},
+            )
 
     assert response.status_code == 400
     assert "Cannot confirm" in response.json()["detail"]
+    assert mock_emit.call_args.args[1] == "reservation.confirm.rejected"
+    assert snapshot_metric_events("fan_reservation_actions_total")[-1].attributes == {
+        "action": "confirm",
+        "result": "invalid_state",
+    }
 
 
 @pytest.mark.asyncio

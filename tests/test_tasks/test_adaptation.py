@@ -20,6 +20,7 @@ from fan_experience.tasks.adaptation import (
     run_adaptation_tick,
     should_rate_limit,
 )
+from fan_experience.telemetry.metrics import snapshot_metric_events
 
 
 def _seed(session, event_hours_from_now=24):
@@ -152,6 +153,9 @@ def test_adaptation_tick_no_change(db_session):
     )
     assert len(logs) == 1
     assert logs[0].result == AdaptationResult.NO_CHANGE
+    assert snapshot_metric_events("fan_adaptation_ticks_total")[-1].attributes == {
+        "result": "no_change"
+    }
 
 
 def test_adaptation_tick_hard_trigger(db_session):
@@ -166,6 +170,9 @@ def test_adaptation_tick_hard_trigger(db_session):
     )
     assert len(logs) == 1
     assert logs[0].result == AdaptationResult.HARD_TRIGGER
+    assert snapshot_metric_events("fan_adaptation_ticks_total")[-1].attributes == {
+        "result": "hard_trigger"
+    }
 
 
 def test_adaptation_tick_rate_limited(db_session):
@@ -194,3 +201,6 @@ def test_adaptation_tick_rate_limited(db_session):
         ).scalars()
     )
     assert len(logs) == 1
+    assert snapshot_metric_events("fan_adaptation_ticks_total")[-1].attributes == {
+        "result": "rate_limited"
+    }
