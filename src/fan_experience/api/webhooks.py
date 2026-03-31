@@ -58,7 +58,7 @@ async def receive_purchase(request: Request, db=Depends(get_db)) -> dict[str, st
         purchased_at=datetime.fromisoformat(data["purchased_at"]),
     )
     db.add(purchase)
-    await _maybe_await(db.flush())
+    await maybe_await(db.flush())
 
     plan = Plan(
         id=uuid.uuid4(),
