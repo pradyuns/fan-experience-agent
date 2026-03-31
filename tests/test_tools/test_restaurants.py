@@ -38,3 +38,16 @@ async def test_search_restaurants_respects_party_size():
         time_range=("17:00", "19:00"),
     )
     assert isinstance(result.data, list)
+
+
+@pytest.mark.asyncio
+async def test_search_restaurants_treats_string_null_as_no_filter():
+    result = await search_restaurants(
+        location=(34.043, -118.267),
+        radius_km=2.0,
+        cuisine_types="null",
+        party_size=2,
+        date="2026-07-01",
+        time_range=("17:00", "19:00"),
+    )
+    assert len(result.data) > 0

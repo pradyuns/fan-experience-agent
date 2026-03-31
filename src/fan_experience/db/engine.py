@@ -21,7 +21,9 @@ _sync_engine = None
 def sync_session() -> Session:
     global _sync_engine
     if _sync_engine is None:
-        _sync_engine = sa_create_engine(settings.database_url.replace("+asyncpg", ""))
+        _sync_engine = sa_create_engine(
+            settings.database_url.replace("+asyncpg", "+psycopg")
+        )
     return Session(_sync_engine)
 
 

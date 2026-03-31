@@ -65,16 +65,28 @@ _MOCK_RESTAURANTS = [
 ]
 
 
+def _normalize_cuisine_types(cuisine_types: list[str] | str | None) -> list[str] | None:
+    if cuisine_types is None:
+        return None
+    if isinstance(cuisine_types, str):
+        normalized = cuisine_types.strip().lower()
+        if normalized in {"", "null", "none"}:
+            return None
+        return [normalized]
+    return cuisine_types
+
+
 # filter mock restaurants by cuisine, radius, and party size
 async def search_restaurants(
     location: tuple[float, float],
     radius_km: float,
-    cuisine_types: list[str] | None,
+    cuisine_types: list[str] | str | None,
     party_size: int,
     date: str,
     time_range: tuple[str, str],
 ) -> ToolResult:
     candidates = _MOCK_RESTAURANTS
+    cuisine_types = _normalize_cuisine_types(cuisine_types)
 
     if cuisine_types:
         candidates = [r for r in candidates if r["cuisine"] in cuisine_types]
