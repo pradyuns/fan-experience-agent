@@ -3,8 +3,6 @@ services:
     image: postgres:16
     container_name: fan-experience-postgres
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-fan_experience}
       POSTGRES_USER: ${POSTGRES_USER:-fan_experience}
@@ -28,8 +26,6 @@ services:
     image: redis:7
     container_name: fan-experience-redis
     restart: unless-stopped
-    env_file:
-      - .env
     ports:
       - "6379:6379"
     volumes:
