@@ -84,67 +84,30 @@ def run_adaptation_tick(plan_id_str: str, db_session: Session | None = None):
             with tracer.start_as_current_span("adaptation.tick") as span:
                 set_span_attributes(span, **{"plan.id": str(plan_id)})
                 try:
-                    with tracer.start_as_current_span("adaptation.next_tick_number"):
-                        max_tick = db_session.execute(
-                            select(func.coalesce(func.max(AdaptationLog.tick_number), 0)).where(
-                                AdaptationLog.plan_id == plan_id
-                            )
-                        ).scalar_one()
-                        tick_number = max_tick + 1
+                    max_tick = db_session.execute(
+                        select(func.coalesce(func.max(AdaptationLog.tick_number), 0)).where(
+                            AdaptationLog.plan_id == plan_id
+                        )
+                    ).scalar_one()
+                    tick_number = max_tick + 1
 
-                    with tracer.start_as_current_span("adaptation.check_hard_triggers"):
-                        hard_triggers = check_hard_triggers(db_session, plan_id)
+                    hard_triggers = check_hard_triggers(db_session, plan_id)
                     if hard_triggers:
                         result = AdaptationResult.HARD_TRIGGER
-                        db_session.add(
-                            AdaptationLog(
-                                plan_id=plan_id,
-                                tick_number=tick_number,
-                                result=result,
-                                trigger_details_json={"triggers": hard_triggers},
-                            )
-                        )
-                        db_session.commit()
-                        record_adaptation_tick(result.value.lower())
-                        emit_event(
-                            logger,
-                            "adaptation.tick.completed",
-                            status=result.value.lower(),
-                            tick_number=tick_number,
-                        )
-                        return result.value
-
-                    with tracer.start_as_current_span("adaptation.rate_limit_check"):
-                        rate_limited = should_rate_limit(db_session, plan_id)
-                    if rate_limited:
+                        details = {"triggers": hard_triggers}
+                    elif should_rate_limit(db_session, plan_id):
                         result = AdaptationResult.RATE_LIMITED
-                        db_session.add(
-                            AdaptationLog(
-                                plan_id=plan_id,
-                                tick_number=tick_number,
-                                result=result,
-                                trigger_details_json={"reason": "rate_limited"},
-                            )
-                        )
-                        db_session.commit()
-                        record_adaptation_tick(result.value.lower())
-                        emit_event(
-                            logger,
-                            "adaptation.tick.completed",
-                            status=result.value.lower(),
-                            tick_number=tick_number,
-                        )
-                        return result.value
+                        details = {"reason": "rate_limited"}
+                    else:
+                        result = AdaptationResult.NO_CHANGE
+                        details = {"checked": ["weather", "traffic", "availability"]}
 
-                    result = AdaptationResult.NO_CHANGE
                     db_session.add(
                         AdaptationLog(
                             plan_id=plan_id,
                             tick_number=tick_number,
                             result=result,
-                            trigger_details_json={
-                                "checked": ["weather", "traffic", "availability"]
-                            },
+                            trigger_details_json=details,
                         )
                     )
                     db_session.commit()

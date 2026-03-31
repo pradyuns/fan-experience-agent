@@ -3,7 +3,7 @@ import hmac
 import json
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -99,7 +99,7 @@ async def test_webhook_creates_plan(webhook_db):
     assert data["status"] == "generating"
     mock_dispatch.apply_async.assert_called_once_with(
         args=[data["plan_id"]],
-        headers={},
+        headers=ANY,
     )
     assert snapshot_metric_events("fan_webhook_events_total")[-1].attributes == {
         "result": "accepted"

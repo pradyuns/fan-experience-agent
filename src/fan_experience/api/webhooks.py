@@ -16,7 +16,7 @@ from fan_experience.tasks.plan_generation import run_plan_generation
 from fan_experience.telemetry.context import bind_context
 from fan_experience.telemetry.logging import emit_event, get_logger
 from fan_experience.telemetry.metrics import record_webhook_event
-from fan_experience.telemetry.tracing import set_span_attributes
+from fan_experience.telemetry.tracing import inject_context, set_span_attributes
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -129,7 +129,10 @@ async def receive_purchase(request: Request, db=Depends(get_db)) -> dict[str, st
                     status="accepted",
                     event_id=str(purchase.event_id),
                 )
-                dispatch_plan_generation.apply_async(args=[str(plan.id)], headers={})
+                dispatch_plan_generation.apply_async(
+                    args=[str(plan.id)],
+                    headers=inject_context(),
+                )
 
             return {"plan_id": str(plan.id), "status": "generating"}
     except HTTPException:

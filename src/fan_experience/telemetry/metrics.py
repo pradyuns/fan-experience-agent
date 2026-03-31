@@ -7,9 +7,9 @@ from opentelemetry import metrics
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from opentelemetry.sdk.resources import Resource
 
 from fan_experience.config import Settings, settings
+from fan_experience.telemetry._otel import otel_resource, signal_endpoint
 
 
 @dataclass(frozen=True)
@@ -41,22 +41,6 @@ _INSTRUMENTS = Instruments()
 _METRIC_EVENTS: list[MetricEvent] = []
 
 
-def _resource(app_settings: Settings) -> Resource:
-    return Resource.create(
-        {
-            "service.name": app_settings.telemetry_service_name,
-            "deployment.environment": app_settings.telemetry_env,
-        }
-    )
-
-
-def _signal_endpoint(base_endpoint: str, signal_name: str) -> str:
-    trimmed = base_endpoint.rstrip("/")
-    if trimmed.endswith(f"/v1/{signal_name}"):
-        return trimmed
-    return f"{trimmed}/v1/{signal_name}"
-
-
 def init_metrics(app_settings: Settings = settings) -> None:
     global _METRICS_INITIALIZED
     if _METRICS_INITIALIZED:
@@ -65,7 +49,7 @@ def init_metrics(app_settings: Settings = settings) -> None:
     if app_settings.telemetry_enabled:
         reader = PeriodicExportingMetricReader(
             OTLPMetricExporter(
-                endpoint=_signal_endpoint(
+                endpoint=signal_endpoint(
                     app_settings.otel_exporter_otlp_endpoint,
                     "metrics",
                 )
@@ -73,7 +57,7 @@ def init_metrics(app_settings: Settings = settings) -> None:
             export_interval_millis=app_settings.otel_metrics_export_interval_ms,
         )
         provider = MeterProvider(
-            resource=_resource(app_settings),
+            resource=otel_resource(app_settings),
             metric_readers=[reader],
         )
         metrics.set_meter_provider(provider)

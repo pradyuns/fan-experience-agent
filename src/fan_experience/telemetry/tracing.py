@@ -5,7 +5,6 @@ from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
@@ -13,25 +12,10 @@ from opentelemetry.trace import Span
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 from fan_experience.config import Settings, settings
+from fan_experience.telemetry._otel import otel_resource, signal_endpoint
 
 _TRACING_INITIALIZED = False
 _PROPAGATOR = TraceContextTextMapPropagator()
-
-
-def _resource(app_settings: Settings) -> Resource:
-    return Resource.create(
-        {
-            "service.name": app_settings.telemetry_service_name,
-            "deployment.environment": app_settings.telemetry_env,
-        }
-    )
-
-
-def _signal_endpoint(base_endpoint: str, signal_name: str) -> str:
-    trimmed = base_endpoint.rstrip("/")
-    if trimmed.endswith(f"/v1/{signal_name}"):
-        return trimmed
-    return f"{trimmed}/v1/{signal_name}"
 
 
 def init_tracing(app_settings: Settings = settings) -> None:
@@ -42,12 +26,12 @@ def init_tracing(app_settings: Settings = settings) -> None:
     if app_settings.telemetry_enabled:
         provider = TracerProvider(
             sampler=TraceIdRatioBased(app_settings.otel_trace_sample_ratio),
-            resource=_resource(app_settings),
+            resource=otel_resource(app_settings),
         )
         provider.add_span_processor(
             BatchSpanProcessor(
                 OTLPSpanExporter(
-                    endpoint=_signal_endpoint(
+                    endpoint=signal_endpoint(
                         app_settings.otel_exporter_otlp_endpoint,
                         "traces",
                     )
