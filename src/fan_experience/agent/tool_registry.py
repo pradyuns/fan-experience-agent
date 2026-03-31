@@ -181,7 +181,7 @@ _TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
         origin=tuple(kw["origin"]),
         destination=tuple(kw["destination"]),
         mode=kw["mode"],
-        _departure_time=kw["departure_time"],
+        departure_time=kw["departure_time"],
     ),
     "estimate_arrival_and_slack": lambda **kw: estimate_arrival_and_slack(
         restaurant_coords=tuple(kw["restaurant_coords"]),
@@ -203,7 +203,7 @@ _TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
 
 # exposing the tool list in the format expected by the agent layer
 def get_tool_definitions() -> list[dict[str, Any]]:
-    return _TOOL_DEFINITIONS
+    return list(_TOOL_DEFINITIONS)
 
 
 # resolving a tool name to its implementation function

@@ -18,12 +18,10 @@ def build_fallback_proposal(
     top_candidates = feasible_candidates[:3]
 
     shortlist = []
+    fallback_time = datetime.now(timezone.utc).isoformat()
     for index, candidate in enumerate(top_candidates):
         feasibility_data = feasibility[candidate["id"]]
-        dining_time = feasibility_data.get(
-            "dining_end_time",
-            datetime.now(timezone.utc).isoformat(),
-        )
+        dining_time = feasibility_data.get("dining_end_time", fallback_time)
         shortlist.append(
             ShortlistOption(
                 candidate_id=candidate["id"],

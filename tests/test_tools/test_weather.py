@@ -6,9 +6,9 @@ from fan_experience.tools.weather import get_weather
 @pytest.mark.asyncio
 async def test_get_weather():
     result = await get_weather(
-        _location=(34.043, -118.267),
-        _date="2026-07-01",
-        _time="18:00",
+        location=(34.043, -118.267),
+        date="2026-07-01",
+        time="18:00",
     )
     d = result.data
     assert "temperature_f" in d

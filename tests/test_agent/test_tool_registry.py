@@ -1,4 +1,4 @@
-from fan_experience.agent.prompt import build_system_prompt
+from fan_experience.agent.prompt import SYSTEM_PROMPT
 from fan_experience.agent.tool_registry import get_tool_definitions, get_tool_handler
 
 
@@ -30,9 +30,8 @@ def test_unknown_tool_returns_none():
 
 # ensuring the prompt contains the required structured output fields
 def test_system_prompt_contains_constraints():
-    prompt = build_system_prompt()
-    assert "shortlist" in prompt
-    assert "candidate_id" in prompt
-    assert "recommended" in prompt
-    assert "option_reasoning" in prompt
-    assert "plan_summary" in prompt
+    assert "shortlist" in SYSTEM_PROMPT
+    assert "candidate_id" in SYSTEM_PROMPT
+    assert "recommended" in SYSTEM_PROMPT
+    assert "option_reasoning" in SYSTEM_PROMPT
+    assert "plan_summary" in SYSTEM_PROMPT

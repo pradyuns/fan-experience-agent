@@ -6,12 +6,12 @@ from fan_experience.tools.restaurants import search_restaurants
 @pytest.mark.asyncio
 async def test_search_restaurants_returns_candidates():
     result = await search_restaurants(
-        _location=(34.043, -118.267),
+        location=(34.043, -118.267),
         radius_km=2.0,
         cuisine_types=["italian", "japanese"],
         party_size=2,
-        _date="2026-07-01",
-        _time_range=("17:00", "19:00"),
+        date="2026-07-01",
+        time_range=("17:00", "19:00"),
     )
     assert result.source is not None
     assert result.freshness_timestamp is not None
@@ -30,11 +30,11 @@ async def test_search_restaurants_returns_candidates():
 @pytest.mark.asyncio
 async def test_search_restaurants_respects_party_size():
     result = await search_restaurants(
-        _location=(34.043, -118.267),
+        location=(34.043, -118.267),
         radius_km=2.0,
         cuisine_types=None,
         party_size=20,
-        _date="2026-07-01",
-        _time_range=("17:00", "19:00"),
+        date="2026-07-01",
+        time_range=("17:00", "19:00"),
     )
     assert isinstance(result.data, list)

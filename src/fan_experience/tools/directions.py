@@ -27,7 +27,7 @@ async def get_directions(
     origin: tuple[float, float],
     destination: tuple[float, float],
     mode: str,
-    _departure_time: str,
+    departure_time: str,
 ) -> ToolResult:
     dist_km = _haversine_km(origin[0], origin[1], destination[0], destination[1])
 

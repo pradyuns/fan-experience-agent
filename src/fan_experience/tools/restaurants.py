@@ -67,12 +67,12 @@ _MOCK_RESTAURANTS = [
 
 # filter mock restaurants by cuisine, radius, and party size
 async def search_restaurants(
-    _location: tuple[float, float],
+    location: tuple[float, float],
     radius_km: float,
     cuisine_types: list[str] | None,
     party_size: int,
-    _date: str,
-    _time_range: tuple[str, str],
+    date: str,
+    time_range: tuple[str, str],
 ) -> ToolResult:
     candidates = _MOCK_RESTAURANTS
 

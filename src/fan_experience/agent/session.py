@@ -1,23 +1,24 @@
+import asyncio
 import json
 from abc import ABC, abstractmethod
 from typing import Any
 
 from anthropic import AsyncAnthropic
 
-from fan_experience.agent.prompt import build_system_prompt
+from fan_experience.agent.prompt import SYSTEM_PROMPT
 from fan_experience.agent.tool_registry import get_tool_definitions, get_tool_handler
 from fan_experience.config import settings
 from fan_experience.schemas.agent import AgentContext, PlanProposal
 
 
-# defining the shared interface for all agent session implementations.
+# shared interface for all agent session implementations
 class AgentSession(ABC):
     @abstractmethod
     async def run(self, context: AgentContext) -> PlanProposal:
         ...
 
 
-# running a single tool-use loop to produce one plan proposal.
+# runs a single tool-use loop to produce one plan proposal
 class SingleTurnSession(AgentSession):
     MAX_TOOL_ROUNDS = 15
 
@@ -25,7 +26,6 @@ class SingleTurnSession(AgentSession):
         self._client = client or AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     async def run(self, context: AgentContext) -> PlanProposal:
-        system_prompt = build_system_prompt()
         user_message = (
             "Generate a dining plan for:\n"
             f"- Event ID: {context.event_id}\n"
@@ -44,7 +44,7 @@ class SingleTurnSession(AgentSession):
             response = await self._client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=4096,
-                system=system_prompt,
+                system=SYSTEM_PROMPT,
                 tools=tools,
                 messages=messages,
             )
@@ -52,39 +52,35 @@ class SingleTurnSession(AgentSession):
             if response.stop_reason == "end_turn":
                 return self._parse_response(response)
 
-            tool_results = []
-            for block in response.content:
-                if block.type != "tool_use":
-                    continue
-
-                handler = get_tool_handler(block.name)
-                if handler is None:
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": json.dumps(
-                                {"error": f"Unknown tool: {block.name}"}
-                            ),
-                        }
-                    )
-                    continue
-
-                result = await handler(**block.input)
-                tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(result.data, default=str),
-                    }
-                )
+            # run all tool calls from this response concurrently
+            tool_blocks = [b for b in response.content if b.type == "tool_use"]
+            tool_results = await asyncio.gather(
+                *[self._execute_tool(b) for b in tool_blocks]
+            )
 
             messages.append({"role": "assistant", "content": response.content})
-            messages.append({"role": "user", "content": tool_results})
+            messages.append({"role": "user", "content": list(tool_results)})
 
         raise RuntimeError("Agent exceeded maximum tool rounds")
 
-    # parsing the final text response into a validated plan proposal.
+    # execute a single tool call and return the result dict
+    async def _execute_tool(self, block: Any) -> dict:
+        handler = get_tool_handler(block.name)
+        if handler is None:
+            return {
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": json.dumps({"error": f"Unknown tool: {block.name}"}),
+            }
+
+        result = await handler(**block.input)
+        return {
+            "type": "tool_result",
+            "tool_use_id": block.id,
+            "content": json.dumps(result.data, default=str),
+        }
+
+    # parse the final text response into a validated plan proposal
     def _parse_response(self, response: Any) -> PlanProposal:
         for block in response.content:
             if block.type == "text":

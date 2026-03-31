@@ -1,3 +1,5 @@
+import copy
+
 from fan_experience.tools.base import ToolResult
 
 _MOCK_PREFERENCES = {
@@ -26,5 +28,6 @@ _DEFAULT_PREFERENCES = {
 
 # returning stored or default preference signals for a fan.
 async def get_user_preferences(user_id: str) -> ToolResult:
-    data = _MOCK_PREFERENCES.get(user_id, _DEFAULT_PREFERENCES)
+    # deep copy to prevent callers from mutating shared mock state
+    data = copy.deepcopy(_MOCK_PREFERENCES.get(user_id, _DEFAULT_PREFERENCES))
     return ToolResult(data=data, source="mock_preference_store")

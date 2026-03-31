@@ -34,11 +34,10 @@ async def estimate_arrival_and_slack(
         origin=restaurant_coords,
         destination=venue_coords,
         mode=mode,
-        _departure_time=dining_end.isoformat(),
+        departure_time=dining_end.isoformat(),
     )
     travel_minutes = directions.data["duration_minutes"]
 
-    recommended_departure = dining_end
     arrival_time = dining_end + timedelta(minutes=travel_minutes)
     slack_minutes = (doors_open - arrival_time).total_seconds() / 60
     is_feasible = slack_minutes >= -_BUFFER_MINUTES
@@ -49,7 +48,7 @@ async def estimate_arrival_and_slack(
         "buffer_minutes": _BUFFER_MINUTES,
         "slack_minutes": round(slack_minutes, 1),
         "is_feasible": is_feasible,
-        "recommended_departure_time": recommended_departure.isoformat(),
+        "recommended_departure_time": dining_end.isoformat(),
         "dining_end_time": dining_end.isoformat(),
     }
     return ToolResult(data=data, source="deterministic_calculator")
