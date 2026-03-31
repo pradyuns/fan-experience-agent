@@ -38,5 +38,7 @@ class NotificationService:
 
     def mark_read(self, notification_id: uuid.UUID) -> None:
         notification = self._session.get(Notification, notification_id)
+        if notification is None:
+            raise ValueError(f"Notification {notification_id} not found")
         notification.read_at = datetime.now(timezone.utc)
         self._session.commit()

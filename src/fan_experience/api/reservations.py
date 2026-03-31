@@ -1,4 +1,3 @@
-import inspect
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -6,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
-from fan_experience.api.deps import get_db
+from fan_experience.api.deps import get_db, maybe_await
 from fan_experience.db.models import Reservation, ReservationStatus
 from fan_experience.schemas.reservation import (
     ReservationConfirmRequest,
@@ -14,12 +13,6 @@ from fan_experience.schemas.reservation import (
 )
 
 router = APIRouter()
-
-
-async def _maybe_await(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value
 
 
 @router.post("/plans/{plan_id}/reservations/preview")
@@ -36,10 +29,10 @@ async def preview_reservation(
         party_size=body.party_size,
         reservation_time=body.dining_time,
         idempotency_key=str(uuid.uuid4()),
-        previewed_at=body.dining_time.astimezone(timezone.utc),
+        previewed_at=datetime.now(timezone.utc),
     )
     db.add(reservation)
-    await _maybe_await(db.commit())
+    await maybe_await(db.commit())
 
     return {
         "reservation_id": str(reservation.id),
@@ -58,7 +51,7 @@ async def confirm_reservation(
     db=Depends(get_db),
 ) -> dict[str, Any]:
     reservation = (
-        await _maybe_await(
+        await maybe_await(
             db.execute(
                 select(Reservation).where(
                     Reservation.idempotency_key == body.idempotency_key
@@ -70,16 +63,7 @@ async def confirm_reservation(
         raise HTTPException(status_code=400, detail="Reservation not found")
 
     if reservation.status == ReservationStatus.CONFIRMED:
-        return {
-            "reservation_id": str(reservation.id),
-            "status": reservation.status.value,
-            "provider_confirmation_id": reservation.provider_confirmation_id,
-            "confirmed_at": (
-                reservation.confirmed_at.isoformat()
-                if reservation.confirmed_at is not None
-                else None
-            ),
-        }
+        return _reservation_response(reservation)
 
     if reservation.status != ReservationStatus.PREVIEW_PENDING:
         raise HTTPException(
@@ -90,8 +74,12 @@ async def confirm_reservation(
     reservation.status = ReservationStatus.CONFIRMED
     reservation.provider_confirmation_id = f"mock-confirm-{uuid.uuid4().hex[:8]}"
     reservation.confirmed_at = datetime.now(timezone.utc)
-    await _maybe_await(db.commit())
+    await maybe_await(db.commit())
 
+    return _reservation_response(reservation)
+
+
+def _reservation_response(reservation: Reservation) -> dict[str, Any]:
     return {
         "reservation_id": str(reservation.id),
         "status": reservation.status.value,

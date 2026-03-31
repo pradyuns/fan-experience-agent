@@ -2,11 +2,9 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from fan_experience.db.models import (
-    Base,
     Event,
     Notification,
     NotificationType,
@@ -19,11 +17,7 @@ from fan_experience.db.models import (
 from fan_experience.tasks.plan_generation import run_plan_generation
 
 
-def _setup():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    session = Session(engine)
-
+def _seed(session):
     user_id = uuid.uuid4()
     event_id = uuid.uuid4()
     purchase_id = uuid.uuid4()
@@ -61,11 +55,11 @@ def _setup():
         ]
     )
     session.commit()
-    return session, plan_id
+    return plan_id
 
 
-def test_run_plan_generation_success():
-    session, plan_id = _setup()
+def test_run_plan_generation_success(db_session):
+    plan_id = _seed(db_session)
 
     from fan_experience.schemas.agent import PlanProposal
     from fan_experience.schemas.plan import ShortlistOption
@@ -96,30 +90,30 @@ def test_run_plan_generation_success():
         "fan_experience.tasks.plan_generation.SingleTurnSession",
         return_value=mock_agent_session,
     ):
-        run_plan_generation(str(plan_id), db_session=session)
+        run_plan_generation(str(plan_id), db_session=db_session)
 
-    plan = session.execute(select(Plan).where(Plan.id == plan_id)).scalar_one()
+    plan = db_session.execute(select(Plan).where(Plan.id == plan_id)).scalar_one()
     assert plan.status == PlanStatus.ACTIVE
 
-    versions = session.execute(
-        select(PlanVersion).where(PlanVersion.plan_id == plan_id)
-    ).scalars()
-    loaded_versions = list(versions)
-    assert len(loaded_versions) == 1
-    assert loaded_versions[0].version_number == 1
+    versions = list(
+        db_session.execute(
+            select(PlanVersion).where(PlanVersion.plan_id == plan_id)
+        ).scalars()
+    )
+    assert len(versions) == 1
+    assert versions[0].version_number == 1
 
-    notifications = session.execute(
-        select(Notification).where(Notification.plan_id == plan_id)
-    ).scalars()
-    loaded_notifications = list(notifications)
-    assert len(loaded_notifications) == 1
-    assert loaded_notifications[0].type == NotificationType.PLAN_CREATED
+    notifications = list(
+        db_session.execute(
+            select(Notification).where(Notification.plan_id == plan_id)
+        ).scalars()
+    )
+    assert len(notifications) == 1
+    assert notifications[0].type == NotificationType.PLAN_CREATED
 
-    session.close()
 
-
-def test_run_plan_generation_failure_marks_failed():
-    session, plan_id = _setup()
+def test_run_plan_generation_failure_marks_failed(db_session):
+    plan_id = _seed(db_session)
 
     mock_agent_session = MagicMock()
     mock_agent_session.run = AsyncMock(
@@ -130,8 +124,7 @@ def test_run_plan_generation_failure_marks_failed():
         "fan_experience.tasks.plan_generation.SingleTurnSession",
         return_value=mock_agent_session,
     ):
-        run_plan_generation(str(plan_id), db_session=session)
+        run_plan_generation(str(plan_id), db_session=db_session)
 
-    plan = session.execute(select(Plan).where(Plan.id == plan_id)).scalar_one()
+    plan = db_session.execute(select(Plan).where(Plan.id == plan_id)).scalar_one()
     assert plan.status == PlanStatus.FAILED
-    session.close()

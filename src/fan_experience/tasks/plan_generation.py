@@ -2,12 +2,12 @@ import asyncio
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fan_experience.agent.guardrails import validate_proposal
 from fan_experience.agent.session import SingleTurnSession
-from fan_experience.config import settings
+from fan_experience.db.engine import sync_session
 from fan_experience.db.models import NotificationType, Plan, PlanStatus, Purchase
 from fan_experience.schemas.agent import AgentContext
 from fan_experience.services.confidence import compute_confidence
@@ -20,14 +20,11 @@ from fan_experience.tasks.celery_app import celery_app
 def run_plan_generation(plan_id_str: str, db_session: Session | None = None):
     plan_id = uuid.UUID(plan_id_str)
 
-    if db_session is None:
-        sync_url = settings.database_url.replace("+asyncpg", "")
-        engine = create_engine(sync_url)
-        db_session = Session(engine)
-        owns_session = True
-    else:
-        owns_session = False
+    owns_session = db_session is None
+    if owns_session:
+        db_session = sync_session()
 
+    plan = None
     try:
         plan = db_session.execute(select(Plan).where(Plan.id == plan_id)).scalar_one()
         purchase = db_session.execute(
@@ -69,9 +66,9 @@ def run_plan_generation(plan_id_str: str, db_session: Session | None = None):
             proposal.plan_summary,
         )
     except Exception:
-        plan = db_session.execute(select(Plan).where(Plan.id == plan_id)).scalar_one()
-        plan.status = PlanStatus.FAILED
-        db_session.commit()
+        if plan is not None:
+            plan.status = PlanStatus.FAILED
+            db_session.commit()
     finally:
         if owns_session:
             db_session.close()

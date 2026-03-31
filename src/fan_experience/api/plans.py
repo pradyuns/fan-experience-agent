@@ -1,34 +1,27 @@
-import inspect
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
-from fan_experience.api.deps import get_db
+from fan_experience.api.deps import get_db, maybe_await
 from fan_experience.db.models import Plan, PlanVersion
 from fan_experience.schemas.plan import FeedbackRequest, RefineRequest
 
 router = APIRouter()
 
 
-async def _maybe_await(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value
-
-
 @router.get("/{plan_id}")
 async def get_plan(plan_id: uuid.UUID, db=Depends(get_db)) -> dict[str, Any]:
     plan = (
-        await _maybe_await(db.execute(select(Plan).where(Plan.id == plan_id)))
+        await maybe_await(db.execute(select(Plan).where(Plan.id == plan_id)))
     ).scalar_one_or_none()
     if plan is None:
         raise HTTPException(status_code=404, detail="Plan not found")
 
     versions = list(
         (
-            await _maybe_await(
+            await maybe_await(
                 db.execute(
                     select(PlanVersion)
                     .where(PlanVersion.plan_id == plan_id)
@@ -69,7 +62,7 @@ async def refine_plan(
     db=Depends(get_db),
 ) -> dict[str, str]:
     plan = (
-        await _maybe_await(db.execute(select(Plan).where(Plan.id == plan_id)))
+        await maybe_await(db.execute(select(Plan).where(Plan.id == plan_id)))
     ).scalar_one_or_none()
     if plan is None:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -84,7 +77,7 @@ async def submit_feedback(
     db=Depends(get_db),
 ) -> dict[str, str]:
     plan = (
-        await _maybe_await(db.execute(select(Plan).where(Plan.id == plan_id)))
+        await maybe_await(db.execute(select(Plan).where(Plan.id == plan_id)))
     ).scalar_one_or_none()
     if plan is None:
         raise HTTPException(status_code=404, detail="Plan not found")

@@ -1,18 +1,18 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from fan_experience.db.models import (
     AdaptationLog,
     AdaptationResult,
-    Base,
     Event,
     Plan,
     PlanStatus,
     PlanVersion,
     Purchase,
+    Reservation,
+    ReservationStatus,
     User,
 )
 from fan_experience.tasks.adaptation import (
@@ -22,11 +22,7 @@ from fan_experience.tasks.adaptation import (
 )
 
 
-def _setup(event_hours_from_now=24):
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    session = Session(engine)
-
+def _seed(session, event_hours_from_now=24):
     user_id = uuid.uuid4()
     event_id = uuid.uuid4()
     purchase_id = uuid.uuid4()
@@ -63,7 +59,6 @@ def _setup(event_hours_from_now=24):
                 status=PlanStatus.ACTIVE,
             ),
             PlanVersion(
-                id=uuid.uuid4(),
                 plan_id=plan_id,
                 version_number=1,
                 payload_json={"shortlist": []},
@@ -76,65 +71,126 @@ def _setup(event_hours_from_now=24):
         ]
     )
     session.commit()
-    return session, plan_id, event_id
+    return plan_id, event_id
 
 
-def test_no_hard_triggers_normally():
-    session, plan_id, _ = _setup()
-    assert check_hard_triggers(session, plan_id) == []
-    session.close()
+def test_no_hard_triggers_normally(db_session):
+    plan_id, _ = _seed(db_session)
+    assert check_hard_triggers(db_session, plan_id) == []
 
 
-def test_rate_limit_no_recent_replans():
-    session, plan_id, _ = _setup()
-    assert should_rate_limit(session, plan_id) is False
-    session.close()
+def test_hard_trigger_expired_event(db_session):
+    plan_id, _ = _seed(db_session, event_hours_from_now=-1)
+    triggers = check_hard_triggers(db_session, plan_id)
+    assert "event_expired" in triggers
 
 
-def test_rate_limit_with_recent_replan():
-    session, plan_id, _ = _setup()
-    session.add(
+def test_hard_trigger_cancelled_reservation(db_session):
+    plan_id, _ = _seed(db_session)
+    db_session.add(
+        Reservation(
+            plan_id=plan_id,
+            restaurant_id="rest-001",
+            restaurant_name="Bestia",
+            status=ReservationStatus.CANCELLED,
+            party_size=2,
+            reservation_time=datetime.now(timezone.utc) + timedelta(hours=2),
+            idempotency_key=str(uuid.uuid4()),
+        )
+    )
+    db_session.commit()
+
+    triggers = check_hard_triggers(db_session, plan_id)
+    assert "reservation_cancelled_by_provider" in triggers
+
+
+def test_rate_limit_no_recent_replans(db_session):
+    plan_id, _ = _seed(db_session)
+    assert should_rate_limit(db_session, plan_id) is False
+
+
+def test_rate_limit_with_recent_replan(db_session):
+    plan_id, _ = _seed(db_session)
+    db_session.add(
         AdaptationLog(
-            id=uuid.uuid4(),
             plan_id=plan_id,
             tick_number=1,
             result=AdaptationResult.REPLAN_TRIGGERED,
             trigger_details_json={"reason": "weather"},
         )
     )
-    session.commit()
+    db_session.commit()
 
-    assert should_rate_limit(session, plan_id) is True
-    session.close()
+    assert should_rate_limit(db_session, plan_id) is True
 
 
-def test_rate_limit_after_max_replans():
-    session, plan_id, _ = _setup()
+def test_rate_limit_after_max_replans(db_session):
+    plan_id, _ = _seed(db_session)
     for index in range(5):
-        session.add(
+        db_session.add(
             AdaptationLog(
-                id=uuid.uuid4(),
                 plan_id=plan_id,
                 tick_number=index + 1,
                 result=AdaptationResult.REPLAN_TRIGGERED,
                 trigger_details_json={},
             )
         )
-    session.commit()
+    db_session.commit()
 
-    assert should_rate_limit(session, plan_id) is True
-    session.close()
+    assert should_rate_limit(db_session, plan_id) is True
 
 
-def test_adaptation_tick_no_change():
-    session, plan_id, _ = _setup()
+def test_adaptation_tick_no_change(db_session):
+    plan_id, _ = _seed(db_session)
 
-    run_adaptation_tick(str(plan_id), db_session=session)
+    run_adaptation_tick(str(plan_id), db_session=db_session)
 
-    logs = session.execute(
-        select(AdaptationLog).where(AdaptationLog.plan_id == plan_id)
-    ).scalars()
-    loaded_logs = list(logs)
-    assert len(loaded_logs) == 1
-    assert loaded_logs[0].result == AdaptationResult.NO_CHANGE
-    session.close()
+    logs = list(
+        db_session.execute(
+            select(AdaptationLog).where(AdaptationLog.plan_id == plan_id)
+        ).scalars()
+    )
+    assert len(logs) == 1
+    assert logs[0].result == AdaptationResult.NO_CHANGE
+
+
+def test_adaptation_tick_hard_trigger(db_session):
+    plan_id, _ = _seed(db_session, event_hours_from_now=-1)
+
+    run_adaptation_tick(str(plan_id), db_session=db_session)
+
+    logs = list(
+        db_session.execute(
+            select(AdaptationLog).where(AdaptationLog.plan_id == plan_id)
+        ).scalars()
+    )
+    assert len(logs) == 1
+    assert logs[0].result == AdaptationResult.HARD_TRIGGER
+
+
+def test_adaptation_tick_rate_limited(db_session):
+    plan_id, _ = _seed(db_session)
+
+    # exhaust the replan budget
+    for i in range(5):
+        db_session.add(
+            AdaptationLog(
+                plan_id=plan_id,
+                tick_number=i + 1,
+                result=AdaptationResult.REPLAN_TRIGGERED,
+                trigger_details_json={},
+            )
+        )
+    db_session.commit()
+
+    run_adaptation_tick(str(plan_id), db_session=db_session)
+
+    logs = list(
+        db_session.execute(
+            select(AdaptationLog).where(
+                AdaptationLog.plan_id == plan_id,
+                AdaptationLog.result == AdaptationResult.RATE_LIMITED,
+            )
+        ).scalars()
+    )
+    assert len(logs) == 1

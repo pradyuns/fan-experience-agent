@@ -1,15 +1,13 @@
 import hashlib
 import hmac
-import inspect
 import json
 import uuid
 from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 
-from fan_experience.api.deps import get_db
+from fan_experience.api.deps import get_db, maybe_await
 from fan_experience.config import settings
 from fan_experience.db.models import Plan, PlanStatus, Purchase
 from fan_experience.tasks.plan_generation import run_plan_generation
@@ -25,12 +23,6 @@ def _verify_hmac(body: bytes, signature: str, secret: str) -> bool:
 dispatch_plan_generation = run_plan_generation
 
 
-async def _maybe_await(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value
-
-
 @router.post("/purchase", status_code=201)
 async def receive_purchase(request: Request, db=Depends(get_db)) -> dict[str, str | None]:
     body = await request.body()
@@ -42,13 +34,13 @@ async def receive_purchase(request: Request, db=Depends(get_db)) -> dict[str, st
     data = json.loads(body)
 
     existing_purchase = (
-        await _maybe_await(
+        await maybe_await(
             db.execute(select(Purchase).where(Purchase.purchase_id == data["purchase_id"]))
         )
     ).scalar_one_or_none()
     if existing_purchase is not None:
         existing_plan = (
-            await _maybe_await(
+            await maybe_await(
                 db.execute(select(Plan).where(Plan.purchase_id == existing_purchase.id))
             )
         ).scalar_one_or_none()
@@ -75,7 +67,7 @@ async def receive_purchase(request: Request, db=Depends(get_db)) -> dict[str, st
         status=PlanStatus.GENERATING,
     )
     db.add(plan)
-    await _maybe_await(db.commit())
+    await maybe_await(db.commit())
 
     dispatch_plan_generation.delay(str(plan.id))
     return {"plan_id": str(plan.id), "status": "generating"}

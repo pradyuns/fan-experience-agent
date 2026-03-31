@@ -1,3 +1,6 @@
+import uuid
+
+import pytest
 from sqlalchemy import select
 
 from fan_experience.db.models import Notification, NotificationType
@@ -41,3 +44,11 @@ def test_mark_read(active_plan):
         select(Notification).where(Notification.id == notification.id)
     ).scalar_one()
     assert reloaded.read_at is not None
+
+
+def test_mark_read_nonexistent(active_plan):
+    session, _ = active_plan
+    service = NotificationService(session)
+
+    with pytest.raises(ValueError, match="not found"):
+        service.mark_read(uuid.uuid4())

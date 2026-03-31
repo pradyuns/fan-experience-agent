@@ -4,13 +4,8 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session as SyncSession
 
+from fan_experience.db.engine import as_utc
 from fan_experience.db.models import UserPreference
-
-
-def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 # managing learned preferences with simple confidence decay over time.
@@ -63,7 +58,7 @@ class PreferenceService:
     ) -> None:
         now = datetime.now(timezone.utc)
         for preference in self.get_preferences(user_id):
-            age_days = (now - _as_utc(preference.updated_at)).total_seconds() / 86400
+            age_days = (now - as_utc(preference.updated_at)).total_seconds() / 86400
             decayed_confidence = preference.confidence - (decay_rate * age_days)
             preference.confidence = max(min_confidence, decayed_confidence)
 

@@ -3,57 +3,12 @@ from datetime import datetime, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.orm import Session
 
 from fan_experience.api.app import create_app
-from fan_experience.db.models import Event, Plan, PlanStatus, Purchase, User
+from fan_experience.db.models import Reservation, ReservationStatus
 
 
-@pytest.fixture
-def seeded_db(db_session: Session):
-    user_id = uuid.uuid4()
-    event_id = uuid.uuid4()
-    purchase_id = uuid.uuid4()
-    plan_id = uuid.uuid4()
-
-    db_session.add_all(
-        [
-            User(id=user_id, name="Fan", email="f@t.com", timezone="UTC"),
-            Event(
-                id=event_id,
-                name="Game",
-                venue_name="V",
-                venue_address="A",
-                venue_lat=34.0,
-                venue_lng=-118.0,
-                event_time=datetime(2026, 7, 1, 20, 0, tzinfo=timezone.utc),
-                doors_open=datetime(2026, 7, 1, 18, 30, tzinfo=timezone.utc),
-                genre="sports",
-            ),
-            Purchase(
-                id=purchase_id,
-                user_id=user_id,
-                event_id=event_id,
-                purchase_id="ext-001",
-                ticket_count=2,
-                purchased_at=datetime.now(timezone.utc),
-            ),
-            Plan(
-                id=plan_id,
-                purchase_id=purchase_id,
-                user_id=user_id,
-                event_id=event_id,
-                status=PlanStatus.ACTIVE,
-            ),
-        ]
-    )
-    db_session.commit()
-    yield db_session, plan_id
-
-
-@pytest.mark.asyncio
-async def test_preview_and_confirm_flow(seeded_db):
-    session, plan_id = seeded_db
+def _make_client(session):
     app = create_app()
 
     async def override_get_db():
@@ -62,6 +17,13 @@ async def test_preview_and_confirm_flow(seeded_db):
     from fan_experience.api.deps import get_db
 
     app.dependency_overrides[get_db] = override_get_db
+    return app
+
+
+@pytest.mark.asyncio
+async def test_preview_and_confirm_flow(active_plan_db):
+    session, plan_id = active_plan_db
+    app = _make_client(session)
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -87,3 +49,87 @@ async def test_preview_and_confirm_flow(seeded_db):
         )
         assert confirm_response.status_code == 200
         assert confirm_response.json()["status"] == "CONFIRMED"
+
+
+@pytest.mark.asyncio
+async def test_confirm_unknown_key(active_plan_db):
+    session, plan_id = active_plan_db
+    app = _make_client(session)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            f"/plans/{plan_id}/reservations/confirm",
+            json={"idempotency_key": "nonexistent"},
+        )
+
+    assert response.status_code == 400
+    assert "not found" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_confirm_wrong_state(active_plan_db):
+    session, plan_id = active_plan_db
+
+    # create a reservation already in CANCELLED state
+    reservation = Reservation(
+        plan_id=plan_id,
+        restaurant_id="rest-001",
+        restaurant_name="Bestia",
+        status=ReservationStatus.CANCELLED,
+        party_size=2,
+        reservation_time=datetime(2026, 7, 1, 17, 30, tzinfo=timezone.utc),
+        idempotency_key="cancelled-key",
+    )
+    session.add(reservation)
+    session.commit()
+
+    app = _make_client(session)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            f"/plans/{plan_id}/reservations/confirm",
+            json={"idempotency_key": "cancelled-key"},
+        )
+
+    assert response.status_code == 400
+    assert "Cannot confirm" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_confirm_idempotent(active_plan_db):
+    session, plan_id = active_plan_db
+    app = _make_client(session)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        preview = await client.post(
+            f"/plans/{plan_id}/reservations/preview",
+            json={
+                "action": "book",
+                "candidate_id": "rest-001",
+                "dining_time": "2026-07-01T17:30:00Z",
+                "party_size": 2,
+            },
+        )
+        key = preview.json()["idempotency_key"]
+
+        first = await client.post(
+            f"/plans/{plan_id}/reservations/confirm",
+            json={"idempotency_key": key},
+        )
+        second = await client.post(
+            f"/plans/{plan_id}/reservations/confirm",
+            json={"idempotency_key": key},
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["reservation_id"] == second.json()["reservation_id"]

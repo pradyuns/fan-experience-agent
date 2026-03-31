@@ -1,10 +1,11 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fan_experience.config import settings
+from fan_experience.db.engine import as_utc, sync_session
 from fan_experience.db.models import (
     AdaptationLog,
     AdaptationResult,
@@ -15,19 +16,13 @@ from fan_experience.db.models import (
 )
 
 
-def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
 def check_hard_triggers(session: Session, plan_id: uuid.UUID) -> list[str]:
     triggers: list[str] = []
 
     plan = session.execute(select(Plan).where(Plan.id == plan_id)).scalar_one()
     event = session.execute(select(Event).where(Event.id == plan.event_id)).scalar_one()
 
-    if _as_utc(event.event_time) < datetime.now(timezone.utc):
+    if as_utc(event.event_time) < datetime.now(timezone.utc):
         triggers.append("event_expired")
 
     cancelled_reservation = session.execute(
@@ -52,28 +47,26 @@ def should_rate_limit(session: Session, plan_id: uuid.UUID) -> bool:
     if total_replans >= settings.max_replans_per_plan:
         return True
 
+    # check for recent replans within the cooldown window
     cooldown_start = datetime.now(timezone.utc) - timedelta(
         minutes=settings.replan_cooldown_minutes
     )
-    recent_replan = session.execute(
-        select(AdaptationLog).where(
+    recent_count = session.execute(
+        select(func.count(AdaptationLog.id)).where(
             AdaptationLog.plan_id == plan_id,
             AdaptationLog.result == AdaptationResult.REPLAN_TRIGGERED,
+            AdaptationLog.created_at >= cooldown_start,
         )
-    ).scalars()
-    return any(_as_utc(log.created_at) >= cooldown_start for log in recent_replan)
+    ).scalar_one()
+    return recent_count > 0
 
 
 def run_adaptation_tick(plan_id_str: str, db_session: Session | None = None):
     plan_id = uuid.UUID(plan_id_str)
 
-    if db_session is None:
-        sync_url = settings.database_url.replace("+asyncpg", "")
-        engine = create_engine(sync_url)
-        db_session = Session(engine)
-        owns_session = True
-    else:
-        owns_session = False
+    owns_session = db_session is None
+    if owns_session:
+        db_session = sync_session()
 
     try:
         max_tick = db_session.execute(

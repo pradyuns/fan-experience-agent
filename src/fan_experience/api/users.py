@@ -1,27 +1,20 @@
-import inspect
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 
-from fan_experience.api.deps import get_db
+from fan_experience.api.deps import get_db, maybe_await
 from fan_experience.db.models import UserPreference
 
 router = APIRouter()
-
-
-async def _maybe_await(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value
 
 
 @router.get("/{user_id}/preferences")
 async def get_preferences(user_id: uuid.UUID, db=Depends(get_db)) -> dict[str, Any]:
     preferences = list(
         (
-            await _maybe_await(
+            await maybe_await(
                 db.execute(
                     select(UserPreference).where(UserPreference.user_id == user_id)
                 )
