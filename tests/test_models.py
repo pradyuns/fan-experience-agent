@@ -18,6 +18,7 @@ from fan_experience.db.models import (
     User,
     UserPreference,
 )
+from tests.factories import EventFactory, PlanFactory, PurchaseFactory, UserFactory
 
 
 def test_create_user_and_purchase(db_session):
@@ -183,3 +184,18 @@ def test_user_preference_and_adaptation_log(db_session):
         select(AdaptationLog).where(AdaptationLog.plan_id == plan_id)
     ).scalar_one()
     assert loaded_log.result == AdaptationResult.NO_CHANGE
+
+
+def test_factories(db_session):
+    user = UserFactory.build()
+    event = EventFactory.build()
+    purchase = PurchaseFactory.build(user_id=user.id, event_id=event.id)
+    plan = PlanFactory.build(
+        purchase_id=purchase.id,
+        user_id=user.id,
+        event_id=event.id,
+    )
+    db_session.add_all([user, event, purchase, plan])
+    db_session.commit()
+
+    assert db_session.execute(select(User)).scalar_one().name == user.name
