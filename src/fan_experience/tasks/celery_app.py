@@ -23,6 +23,8 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
+    worker_hijack_root_logger=False,
+    worker_redirect_stdouts=False,
 )
 register_celery_signal_handlers()
 
