@@ -435,13 +435,6 @@ In Grafana:
 }
 ```
 
-## Current Limitations
-
-- Restaurant, weather, directions, and reservation providers are still mocked
-- Authentication and end-user identity management are not implemented
-- Delivery channels such as SMS or email are not implemented
-- The current CD workflow builds artifacts on `main` but does not deploy to a hosting target
-
 ## CI/CD
 
 GitHub Actions workflows live in `.github/workflows/`:
