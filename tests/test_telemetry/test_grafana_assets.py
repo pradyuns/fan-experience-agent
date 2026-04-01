@@ -24,7 +24,8 @@ def test_grafana_datasources_and_dashboard_assets_exist():
     assert dashboard["uid"] == "fan-experience-observability"
 
     panel_titles = {panel["title"] for panel in dashboard["panels"]}
-    assert "HTTP Request Rate" in panel_titles
-    assert "HTTP P95 Latency" in panel_titles
-    assert "Plan Generation Outcomes" in panel_titles
+    assert "Webhook -> Plan Success Rate" in panel_titles
+    assert "P95 Latency" in panel_titles
+    assert "Anthropic Latency" in panel_titles
+    assert "Plan Failures" in panel_titles
     assert "Trace Usage" in panel_titles
