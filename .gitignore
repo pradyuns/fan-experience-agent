@@ -1,4 +1,7 @@
-docs/
+docs/*
+!docs/observability-screenshots.md
+!docs/grafana-dashboard.png
+!docs/grafana-trace-waterfall.png
 .venv/
 .pytest_cache/
 __pycache__/

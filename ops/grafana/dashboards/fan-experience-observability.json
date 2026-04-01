@@ -31,25 +31,25 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 2,
+          "decimals": 1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
                 "color": "yellow",
-                "value": 1
+                "value": 0.7
               },
               {
-                "color": "red",
-                "value": 5
+                "color": "green",
+                "value": 0.95
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "percentunit"
         },
         "overrides": []
       },
@@ -77,13 +77,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(fan_http_requests_total[$__rate_interval]))",
+          "expr": "sum(fan_plan_generation_total{result=\"success\"}) / clamp_min(sum(fan_webhook_events_total{result=\"accepted\"}), 1)",
+          "instant": true,
           "legendFormat": "",
-          "range": true,
+          "range": false,
           "refId": "A"
         }
       ],
-      "title": "HTTP Request Rate",
+      "title": "Webhook -> Plan Success Rate",
       "type": "stat"
     },
     {
@@ -142,13 +143,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(fan_http_request_duration_seconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (fan_http_request_duration_seconds_bucket))",
+          "instant": true,
           "legendFormat": "",
-          "range": true,
+          "range": false,
           "refId": "A"
         }
       ],
-      "title": "HTTP P95 Latency",
+      "title": "P95 Latency",
       "type": "stat"
     },
     {
@@ -161,7 +163,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 2,
+          "decimals": 3,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -171,15 +173,15 @@
               },
               {
                 "color": "yellow",
-                "value": 0.5
+                "value": 4
               },
               {
                 "color": "red",
-                "value": 2
+                "value": 8
               }
             ]
           },
-          "unit": "ops"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -207,13 +209,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(fan_celery_tasks_total[$__rate_interval]))",
+          "expr": "histogram_quantile(0.95, sum by (le) (fan_anthropic_request_duration_seconds_bucket))",
+          "instant": true,
           "legendFormat": "",
-          "range": true,
+          "range": false,
           "refId": "A"
         }
       ],
-      "title": "Celery Task Rate",
+      "title": "Anthropic Latency",
       "type": "stat"
     },
     {
@@ -224,8 +227,27 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
-          }
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -237,28 +259,31 @@
       },
       "id": 4,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "textMode": "auto"
       },
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (result) (rate(fan_plan_generation_total[$__rate_interval]))",
-          "legendFormat": "{{result}}",
-          "range": true,
+          "expr": "sum(fan_plan_generation_total{result=\"failure\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
           "refId": "A"
         }
       ],
-      "title": "Plan Generation Outcomes",
-      "type": "timeseries"
+      "title": "Plan Failures",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -860,7 +885,7 @@
       },
       "id": 18,
       "options": {
-        "content": "Use Grafana Explore with the `Tempo` datasource to inspect traces for `fan-experience-agent`. Helpful span names include `plan_generation.run`, `adaptation.tick`, `agent.session`, and `anthropic.messages.create`.",
+        "content": "Open Grafana Explore with the `Tempo` datasource, search for `fan-experience-agent`, or paste a trace ID. Focus on `plan_generation.run`, `agent.session`, `anthropic.messages.create`, and `adaptation.tick`.",
         "mode": "markdown"
       },
       "pluginVersion": "11.3.0",
