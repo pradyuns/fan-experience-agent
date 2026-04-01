@@ -19,3 +19,10 @@ def test_docker_compose_config_is_valid():
     )
 
     assert result.returncode == 0, result.stderr
+    assert "prometheus:" in result.stdout
+    assert "tempo:" in result.stdout
+    assert "grafana:" in result.stdout
+    assert "/etc/prometheus/prometheus.yml" in result.stdout
+    assert "/etc/tempo/tempo.yaml" in result.stdout
+    assert "/etc/grafana/provisioning/datasources" in result.stdout
+    assert "/etc/grafana/provisioning/dashboards" in result.stdout

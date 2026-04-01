@@ -6,6 +6,8 @@ receivers:
 
 exporters:
   debug: {}
+  otlphttp/tempo:
+    endpoint: http://tempo:4318
   prometheus:
     endpoint: 0.0.0.0:9464
 
@@ -13,8 +15,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      exporters: [debug]
+      exporters: [debug, otlphttp/tempo]
     metrics:
       receivers: [otlp]
       exporters: [prometheus]
-

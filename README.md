@@ -127,7 +127,7 @@ The test suite covers:
 - webhook, plan, reservation, and user API endpoints
 - background task behavior for plan generation and adaptation logic
 
-The suite covers unit, API, and worker/integration tests across webhook ingestion, planning state transitions, reservation idempotency, and plan adaptation flows. Current local verification: `73` passing tests.
+The suite covers unit, API, and worker/integration tests across webhook ingestion, planning state transitions, reservation idempotency, plan adaptation flows, and observability wiring. Current local verification: `95` passing tests.
 
 Run the full suite:
 
@@ -156,6 +156,8 @@ The same `.env` may also contain:
 - `POSTGRES_DB`
 - `POSTGRES_USER`
 - `POSTGRES_PASSWORD`
+- `GRAFANA_ADMIN_USER`
+- `GRAFANA_ADMIN_PASSWORD`
 
 These are used by Docker Compose and are ignored by the Python settings layer.
 
@@ -184,23 +186,41 @@ Set at least:
 FAN_ANTHROPIC_API_KEY=your_real_key_here
 ```
 
+Optional Grafana credentials:
+
+```env
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=admin
+```
+
 ## Start Local Infrastructure
 
 ```bash
-docker compose up -d postgres redis otel-collector
+docker compose up -d postgres redis otel-collector prometheus tempo grafana
 ```
 
 Optional validation:
 
 ```bash
 docker compose config
-docker ps --filter name=fan-experience-postgres --filter name=fan-experience-redis
+docker ps --filter name=fan-experience-postgres --filter name=fan-experience-redis --filter name=fan-experience-grafana
 ```
 
 Local observability endpoints:
 
 - OTLP HTTP ingest: `http://localhost:4318`
 - Prometheus metrics from the collector: `http://localhost:9464/metrics`
+- Prometheus UI: `http://localhost:9090`
+- Tempo query API: `http://localhost:3200`
+- Grafana UI: `http://localhost:3000`
+
+Grafana ships pre-provisioned with:
+
+- `Prometheus` datasource at `http://prometheus:9090`
+- `Tempo` datasource at `http://tempo:3200`
+- `Fan Experience Observability` dashboard in the `Observability` folder
+
+Logs remain stdout-only in this repo. Grafana covers metrics and traces only in the current setup.
 
 ## Bootstrap the Database
 
@@ -279,6 +299,11 @@ In a second terminal, start the worker:
 PYTHONPATH=src celery -A fan_experience.tasks.celery_app.celery_app worker -l info -P solo
 ```
 
+Open Grafana at `http://localhost:3000` and sign in with the configured admin credentials to view:
+
+- the `Fan Experience Observability` dashboard for metrics
+- Grafana Explore with the `Tempo` datasource for traces
+
 ## Smoke Test
 
 Send a signed purchase webhook:
@@ -350,6 +375,20 @@ curl -X POST http://127.0.0.1:8000/plans/<PLAN_ID>/reservations/confirm \
     "idempotency_key": "<IDEMPOTENCY_KEY_FROM_PREVIEW>"
   }'
 ```
+
+After the smoke flow runs, verify observability:
+
+```bash
+curl -sf http://localhost:9090/-/ready
+curl -sf http://localhost:3000/api/health
+curl -sf http://localhost:9464/metrics | grep fan_http_requests_total
+```
+
+In Grafana:
+
+- open the `Fan Experience Observability` dashboard and confirm panels populate
+- open Explore, select the `Tempo` datasource, and search for the `fan-experience-agent` service
+- inspect a trace that includes the HTTP request span and the propagated Celery task span
 
 ## Example Responses
 
