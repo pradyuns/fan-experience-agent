@@ -1,8 +1,26 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from fan_experience.agent.guardrails import validate_proposal
 from fan_experience.schemas.agent import PlanProposal
 from fan_experience.schemas.plan import ShortlistOption
+
+
+async def test_event_validation_allows_feasible_times_across_utc_midnight():
+    from datetime import timedelta
+    from types import SimpleNamespace
+
+    from fan_experience.agent.guardrails import validate_against_event
+
+    event = SimpleNamespace(
+        venue_lat=34.043, venue_lng=-118.267,
+        doors_open=datetime(2026, 7, 2, 2, 0, tzinfo=timezone.utc),
+    )
+    proposal = _make_proposal(["rest-002", "rest-003"])
+    for option in proposal.shortlist:
+        option.dining_time = datetime(2026, 7, 1, 16, 30, tzinfo=timezone(timedelta(hours=-7)))
+    assert await validate_against_event(proposal, event, 2) == []
 
 
 # building proposal fixtures with controllable recommendation counts
@@ -26,12 +44,24 @@ def _make_proposal(candidate_ids=None, recommended_count=1):
 
 
 # ensuring a clean proposal passes all hard validations
-def test_valid_proposal_passes():
+@pytest.mark.parametrize("ids", [["rest-001", "rest-002"], ["rest-001", "rest-002", "rest-003"]])
+def test_valid_proposal_passes(ids):
     known_ids = {"rest-001", "rest-002", "rest-003"}
-    feasible_ids = {"rest-001", "rest-002"}
-    proposal = _make_proposal(["rest-001", "rest-002"])
+    feasible_ids = known_ids
+    proposal = _make_proposal(ids)
     errors = validate_proposal(proposal, known_ids, feasible_ids)
     assert errors == []
+
+
+@pytest.mark.parametrize("ids", [["rest-001"], ["rest-001", "rest-002", "rest-003", "rest-004"]])
+def test_rejects_wrong_shortlist_size(ids):
+    errors = validate_proposal(_make_proposal(ids), set(ids), set(ids))
+    assert any("2-3" in error for error in errors)
+
+
+def test_rejects_duplicate_candidate_ids():
+    errors = validate_proposal(_make_proposal(["rest-001", "rest-001"]), {"rest-001"}, {"rest-001"})
+    assert any("distinct" in error for error in errors)
 
 
 # rejecting candidate ids the agent did not receive from tools

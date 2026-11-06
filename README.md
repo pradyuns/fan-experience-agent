@@ -2,7 +2,13 @@
 
 Fan Experience Agent is an event-day concierge backend that turns a ticket-purchase webhook into a personalized pre-event dining plan. It enriches each purchase with venue context, dining candidates, timing feasibility, weather, and reservation options, then generates a structured itinerary through an asynchronous FastAPI + Celery pipeline.
 
-The project is designed to demonstrate a production-style agentic backend with deterministic guardrails, background task orchestration, relational persistence, and a smoke-testable end-to-end recommendation flow.
+The backend combines agent tool calls, deterministic timing checks, background tasks, and relational persistence to generate dining plans. Restaurant, weather, directions, and reservation providers currently use mock data.
+
+## Offline demo
+
+After installing the dependencies below, run `PYTHONPATH=src python scripts/offline_demo.py`. It searches mock restaurant fixtures and checks an example proposal without an API key, database, Redis, or network calls. It does not run the model or make a reservation.
+
+Before saving an agent-generated plan, the worker requires two or three distinct candidates and exactly one recommendation, searches candidates independently, and checks each proposed time against the event's doors-open time. The current mock restaurant data supplies distances rather than coordinates, so this check estimates walking at 4.8 km/h using category-based dining durations and allows arrival up to 10 minutes after doors open. It does not verify reservation availability or use live route data.
 
 ## What It Does
 
@@ -127,7 +133,7 @@ The test suite covers:
 - webhook, plan, reservation, and user API endpoints
 - background task behavior for plan generation and adaptation logic
 
-The suite covers unit, API, and worker/integration tests across webhook ingestion, planning state transitions, reservation idempotency, plan adaptation flows, and observability wiring. Current local verification: `95` passing tests.
+The suite covers unit, API, and worker/integration tests across webhook ingestion, planning state transitions, reservation idempotency, plan adaptation flows, and observability wiring.
 
 Run the full suite:
 

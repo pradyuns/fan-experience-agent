@@ -71,7 +71,7 @@ def test_run_plan_generation_success(db_session):
             ShortlistOption(
                 candidate_id="rest-001",
                 recommended=True,
-                dining_time=datetime(2026, 7, 1, 17, 30, tzinfo=timezone.utc),
+                dining_time=datetime(2026, 7, 1, 16, 30, tzinfo=timezone.utc),
                 option_reasoning="Best match",
             ),
             ShortlistOption(
@@ -81,7 +81,7 @@ def test_run_plan_generation_success(db_session):
                 option_reasoning="Budget option",
             ),
         ],
-        plan_summary="Dinner at Bestia at 5:30pm",
+        plan_summary="Dinner at Bestia at 4:30pm",
         conversation_history=[],
     )
 
@@ -115,6 +115,42 @@ def test_run_plan_generation_success(db_session):
     assert snapshot_metric_events("fan_plan_generation_total")[-1].attributes == {
         "result": "success"
     }
+
+
+@pytest.mark.parametrize(
+    ("candidate_id", "hour", "message"),
+    [("invented", 16, "Unknown candidate_id"), ("rest-001", 18, "not feasible")],
+)
+def test_plan_generation_rejects_unverified_or_infeasible_candidates(
+    db_session, candidate_id, hour, message
+):
+    from fan_experience.schemas.agent import PlanProposal
+    from fan_experience.schemas.plan import ShortlistOption
+
+    plan_id = _seed(db_session)
+    proposal = PlanProposal(
+        shortlist=[
+            ShortlistOption(
+                candidate_id=candidate_id, recommended=True,
+                dining_time=datetime(2026, 7, 1, hour, 0, tzinfo=timezone.utc),
+                option_reasoning="Suggested by agent",
+            ),
+            ShortlistOption(
+                candidate_id="rest-002", recommended=False,
+                dining_time=datetime(2026, 7, 1, 17, 0, tzinfo=timezone.utc),
+                option_reasoning="Alternative",
+            ),
+        ],
+        plan_summary="Dinner", conversation_history=[],
+    )
+    agent = MagicMock()
+    agent.run = AsyncMock(return_value=proposal)
+    with patch("fan_experience.tasks.plan_generation.SingleTurnSession", return_value=agent):
+        with pytest.raises(ValueError, match=message):
+            run_plan_generation(str(plan_id), db_session=db_session)
+    plan = db_session.execute(select(Plan).where(Plan.id == plan_id)).scalar_one()
+    assert plan.status == PlanStatus.FAILED
+    assert not list(db_session.execute(select(PlanVersion).where(PlanVersion.plan_id == plan_id)).scalars())
 
 
 def test_run_plan_generation_failure_marks_failed(db_session):

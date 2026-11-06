@@ -7,10 +7,10 @@ from opentelemetry.trace import Status, StatusCode
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fan_experience.agent.guardrails import validate_proposal
+from fan_experience.agent.guardrails import validate_against_event
 from fan_experience.agent.session import SingleTurnSession
 from fan_experience.db.engine import sync_session
-from fan_experience.db.models import NotificationType, Plan, PlanStatus, Purchase
+from fan_experience.db.models import Event, NotificationType, Plan, PlanStatus, Purchase
 from fan_experience.schemas.agent import AgentContext
 from fan_experience.services.confidence import compute_confidence
 from fan_experience.services.notification_service import NotificationService
@@ -75,10 +75,12 @@ def run_plan_generation(plan_id_str: str, db_session: Session | None = None):
 
                         proposal = asyncio.run(SingleTurnSession().run(context))
 
-                        known_ids = {
-                            option.candidate_id for option in proposal.shortlist
-                        }
-                        errors = validate_proposal(proposal, known_ids, known_ids)
+                        event = db_session.execute(
+                            select(Event).where(Event.id == plan.event_id)
+                        ).scalar_one()
+                        errors = asyncio.run(
+                            validate_against_event(proposal, event, purchase.ticket_count)
+                        )
                         if errors:
                             raise ValueError(
                                 f"Proposal failed guardrails: {errors}"
